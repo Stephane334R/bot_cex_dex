@@ -1,0 +1,7 @@
+cex_dex.md
+.env
+.venv/
+data/
+__pycache__/
+*.pyc
+.pytest_cache/

@@ -1,0 +1,66 @@
+# CEX–DEX arbitrage shadow bot configuration.
+# Every number that affects PnL lives here. Nothing in this project signs or sends transactions.
+
+pair:
+  base: ETH
+  quote: USDC
+
+cex:
+  venue: binance            # binance | bybit | okx  (fallbacks if Binance is geo-blocked)
+  symbol: ETHUSDC           # venue-native symbol: binance/bybit "ETHUSDC", okx "ETH-USDC"
+  taker_fee_bps: 10.0       # 0.10% = Binance VIP0 taker. Market makers typically pay far less.
+  assume_deep_liquidity: false   # false: cap size at top-of-book qty; true: ignore that cap
+  max_quote_age_ms: 2000    # skip evaluation if the CEX quote is older than this
+  quote_store_interval_ms: 100   # downsample stored bookTicker updates (used by the latency slider)
+
+dex:
+  chain_id: 42161           # Arbitrum One
+  # Addresses below were verified on-chain (code present, symbol/decimals, quoter.factory() == factory).
+  factory: "0x1F98431c8aD98523631AE4a59f267346ea31F984"     # Uniswap v3 Factory
+  quoter_v2: "0x61fFE014bA17989E743c5F6cB21bF9697530B21e"   # Uniswap v3 QuoterV2
+  multicall3: "0xcA11bde05977b3631167028862bE2a173976CA11"
+  base_token: "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1"  # WETH (18)
+  quote_token: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831" # native USDC (6). USDC.e is 0xFF97...5CC8
+  fee_tier: 500             # 0.05%; the pool address is resolved via factory.getPool at startup
+  tick_window: 600          # load initialized ticks within ±600 ticks (~±6%) of the current tick
+  quoter_check_every_n_evals: 100   # live QuoterV2 cross-check cadence (0 = off)
+  quoter_check_sizes: [0.5, 5.0, 50.0]   # in base units (ETH)
+  quoter_tolerance_bps: 0.01
+
+gas:
+  swap_gas_units: 130000    # L2 execution gas for a single-hop exactInput/exactOutput swap
+  l1_calldata_bytes: 250    # approx. compressed calldata posted to L1 (priced via ArbGasInfo)
+  gas_price_multiplier: 1.0
+  l1_refresh_s: 60
+
+strategy:
+  max_notional_usd: 250000
+  min_size: 0.01            # ETH
+  slippage_haircut_bps: 1.0 # extra latency/slippage haircut on traded notional
+  threshold_usd: 1.0        # "take" the trade if net PnL > threshold_usd ...
+  threshold_bps: 0.0        # ... and net edge (bps of notional) > threshold_bps
+  latency_ms: 250           # CEX leg re-priced with the quote seen this long after the decision
+  grid_points: 32           # size grid stored per evaluation (sensitivity panel / size explorer)
+
+collector:
+  min_eval_interval_s: 1.0  # throttle: evaluate at most once per this many seconds
+  poll_interval_s: 0.25     # block polling period when no WebSocket RPC is configured
+  competition_blocks: 20    # look this many blocks ahead for Swap events that closed the gap
+  competition_check_interval_s: 10
+
+inventory:                  # simulated starting balances per venue
+  cex: {base: 50.0, quote: 100000.0}
+  dex: {base: 50.0, quote: 100000.0}
+
+storage:
+  path: data/arb.sqlite
+
+backfill:
+  hours: 3.0                # how far back (public RPCs return logs for long ranges; state comes from replay)
+  step_s: 5                 # evaluate every N seconds of history
+  synthetic_half_spread_bps: 0.25   # 1s klines carry no bid/ask; assume close ± this
+  logs_chunk_blocks: 10000
+  extra_tick_window: 3000   # wider window for replay, since price drifts over the backfill period
+
+logging:
+  level: INFO
