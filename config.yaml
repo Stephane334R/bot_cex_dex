@@ -59,6 +59,7 @@ backfill:
   hours: 3.0                # how far back (public RPCs return logs for long ranges; state comes from replay)
   step_s: 5                 # evaluate every N seconds of history
   synthetic_half_spread_bps: 0.25   # 1s klines carry no bid/ask; assume close ± this
+  assumed_top_qty: 10.0     # klines carry no book size either; assumed top-of-book qty (ETH)
   logs_chunk_blocks: 10000
   extra_tick_window: 3000   # wider window for replay, since price drifts over the backfill period
 

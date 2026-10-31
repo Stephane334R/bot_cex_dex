@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import sys
+from dataclasses import astuple
 from pathlib import Path
 
 import numpy as np
@@ -47,6 +48,13 @@ def _run(run_id: str):
     d = load_run(_con(), run_id)
     d["long"] = explode_curves(d["ev"], d["dirs"]) if len(d["ev"]) else pd.DataFrame()
     return d
+
+
+@st.cache_data(ttl=30, show_spinner=False)
+def _recompute(run_id: str, n_evals: int, assumptions: tuple):
+    """Cached what-if recompute; n_evals is part of the key so live runs refresh as data grows."""
+    d = _run(run_id)
+    return recompute(d["long"], d["quotes"], Assumptions(*assumptions))
 
 
 if not Path(CFG.storage.path).exists():
@@ -163,7 +171,8 @@ def pnl_charts(opps: pd.DataFrame):
 
 
 def sensitivity(d):
-    best = recompute(d["long"], d["quotes"], a)
+    n = len(d["ev"])
+    best = _recompute(run_id, n, astuple(a))
     if best.empty:
         st.info("Nothing to recompute (no size curves feasible under these assumptions).")
         return
@@ -192,7 +201,7 @@ def sensitivity(d):
     fees = np.arange(0, 15.5, 0.5)
     surv = []
     for f in fees:
-        b = recompute(d["long"], d["quotes"], Assumptions(**{**a.__dict__, "cex_fee_bps": f}))
+        b = _recompute(run_id, n, astuple(Assumptions(**{**a.__dict__, "cex_fee_bps": float(f)})))
         bt = b[b["taken"]] if len(b) else b
         surv.append((len(bt), bt["net_realized"].sum() if len(bt) else 0.0))
     fig = make_subplots(specs=[[{"secondary_y": True}]])

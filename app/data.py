@@ -79,12 +79,14 @@ class Assumptions:
 
 def explode_curves(ev: pd.DataFrame, dirs: pd.DataFrame) -> pd.DataFrame:
     """Long table: one row per (evaluation, direction, grid size)."""
-    rows = []
-    for r in dirs[["eval_id", "direction", "curve"]].itertuples(index=False):
-        pts = json.loads(r.curve) if r.curve else []
-        for size, dex_usd, fee_usd in pts:
-            rows.append((r.eval_id, r.direction, size, dex_usd, fee_usd))
-    long = pd.DataFrame(rows, columns=["eval_id", "direction", "size", "dex_usd", "dex_fee"])
+    dirs = dirs[dirs["curve"].notna() & (dirs["curve"] != "[]")]
+    # One json.loads over the concatenated curves is ~10x faster than one per row.
+    curves = json.loads("[" + ",".join(dirs["curve"]) + "]")
+    counts = np.fromiter((len(c) for c in curves), int, len(curves))
+    pts = np.array([p for c in curves for p in c], dtype=float).reshape(-1, 3)
+    long = pd.DataFrame({"eval_id": np.repeat(dirs["eval_id"].values, counts),
+                         "direction": np.repeat(dirs["direction"].values, counts),
+                         "size": pts[:, 0], "dex_usd": pts[:, 1], "dex_fee": pts[:, 2]})
     cols = ["id", "ts", "block", "bid", "ask", "bid_qty", "ask_qty", "gas_usd"]
     return long.merge(ev[cols].rename(columns={"id": "eval_id"}), on="eval_id")
 
